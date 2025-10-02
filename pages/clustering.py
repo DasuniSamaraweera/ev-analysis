@@ -26,6 +26,17 @@ def show_clustering_page(df):
 
     # Final clean dataset
     df = df[['Electric Range', 'Latitude', 'Longitude']].dropna()
+    
+    # ✅ FIXED: Validate coordinate bounds to prevent map errors
+    df = df[
+        (df['Latitude'].between(-90, 90)) &
+        (df['Longitude'].between(-180, 180)) &
+        (df['Electric Range'] >= 0)
+    ]
+    
+    if len(df) == 0:
+        st.error("No valid data found after cleaning. Please check the dataset.")
+        return
 
     st.subheader("Processed Data Sample")
     st.write(df.head())
@@ -62,6 +73,19 @@ def show_clustering_page(df):
     # -----------------------------
     st.subheader("🌍 Interactive Map of EV Clusters")
 
+    # ✅ FIXED: Additional validation before creating map
+    if len(df) == 0:
+        st.error("No data available for mapping after clustering.")
+        return
+        
+    # Ensure coordinates are reasonable for mapping
+    lat_center = df['Latitude'].median()
+    lon_center = df['Longitude'].median()
+    
+    if not (-90 <= lat_center <= 90) or not (-180 <= lon_center <= 180):
+        st.error("Invalid coordinate data detected. Cannot create map.")
+        return
+
     cluster_colors = [
         [255, 0, 0], [0, 255, 0], [0, 0, 255],
         [255, 255, 0], [255, 0, 255], [0, 255, 255],
@@ -70,9 +94,15 @@ def show_clustering_page(df):
 
     df['color'] = df['Cluster'].apply(lambda x: cluster_colors[x % len(cluster_colors)])
 
+    # ✅ FIXED: Limit data size to prevent memory issues
+    map_df = df.head(5000)  # Limit to 5000 points max
+    
+    if len(df) > 5000:
+        st.info(f"Showing {len(map_df)} out of {len(df)} points on the map for performance.")
+
     layer = pdk.Layer(
         "ScatterplotLayer",
-        data=df,
+        data=map_df,
         get_position='[Longitude, Latitude]',
         get_radius=200,
         get_color='color',
@@ -80,8 +110,8 @@ def show_clustering_page(df):
     )
 
     view_state = pdk.ViewState(
-        latitude=df['Latitude'].mean(),
-        longitude=df['Longitude'].mean(),
+        latitude=lat_center,
+        longitude=lon_center,
         zoom=7,
         pitch=0,
     )
@@ -91,4 +121,9 @@ def show_clustering_page(df):
         initial_view_state=view_state,
         tooltip={"text": "Cluster: {Cluster}\nRange: {Electric Range}"}
     )
-    st.pydeck_chart(r)
+    
+    try:
+        st.pydeck_chart(r)
+    except Exception as e:
+        st.error(f"Map rendering failed: {str(e)}")
+        st.info("Try reducing the number of clusters or check your data for invalid coordinates.")
