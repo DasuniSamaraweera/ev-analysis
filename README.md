@@ -35,5 +35,5 @@ An interactive Streamlit web app for exploring, forecasting, and visualizing ele
 
 ---
 
-## 📂 Project Structure
+
 
